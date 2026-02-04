@@ -21,7 +21,6 @@ export const createWicketEvent = async ({
 
   // For stumped, bowler doesn't get credit
   const wicketBowlerId = wicketType === 'STUMPED' ? null : actualBowlerId;
-
   // Insert wicket event
   const [result] = await conn.query(
     `INSERT INTO wicket_events (innings_id, ball_over_number, wicket_type, batsman_id, fielder_id, bowler_id) 

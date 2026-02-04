@@ -175,8 +175,8 @@ export const scoreBall = async (req, res) => {
       }
 
       await conn.query(
-        `UPDATE innings SET striker_id=?, non_striker_id=?, waiting_for_new_batsman = TRUE WHERE id = ?`,
-        [strikerId, nonStrikerId, inningsId],
+        `UPDATE innings SET striker_id=?, non_striker_id=?,waiting_for_new_batsman = TRUE, last_batsman_out_end=? WHERE id = ?`,
+        [strikerId, nonStrikerId, outEnd, inningsId],
       );
 
       const eligibleBatsmen = await getEligibleBatsmen({
@@ -191,6 +191,7 @@ export const scoreBall = async (req, res) => {
         message: `Wicket fallen! ${wicketType}`,
         wicketFallen: true,
         wicketType,
+        outEnd,
         eligibleBatsmen,
       });
     }
