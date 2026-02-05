@@ -14,7 +14,7 @@ export const checkAndEndInnings= async(conn, innings)=>{
 
     if(innings_number===2){
         const [[firstInnings]]= await conn.query(
-            "SELECT total_runs FROM innings WHERE match_id= ? AND innings_number=1",
+            "SELECT total_runs FROM innings WHERE match_id= ? AND innings_number=2",
             [match_id]
         );
         console.log(firstInnings);
