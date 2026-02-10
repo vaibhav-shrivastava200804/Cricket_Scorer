@@ -14,10 +14,14 @@ export const checkAndEndInnings= async(conn, innings)=>{
 
     if(innings_number===2){
         const [[firstInnings]]= await conn.query(
+            "SELECT total_runs FROM innings WHERE match_id= ? AND innings_number=1",
+            [match_id]
+        );
+        const [[secondInnigs]]= await conn.query(
             "SELECT total_runs FROM innings WHERE match_id= ? AND innings_number=2",
             [match_id]
         );
-        console.log(firstInnings);
+        console.log(secondInnigs);
         target=firstInnings.total_runs+1;
     }
     const shouldEnd= shouldEndInnings({

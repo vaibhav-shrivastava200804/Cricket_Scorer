@@ -6,7 +6,7 @@ import {
   getEligibleBatsmen,
 } from "../services/wicket.service.js";
 import { isOverCompleted, swapStrikeEndofOver } from "../utils/over.utils.js";
-import { shouldRotateStrike, rotateStrike } from "../utils/strike.utils.js";
+import { matchResult } from "../services/matchResult.service.js";
 
 export const scoreBall = async (req, res) => {
   const {
@@ -209,7 +209,6 @@ export const scoreBall = async (req, res) => {
     );
     console.log("updated balls in over " + checkOver.balls_in_over);
     console.log(isOverCompleted(checkOver.balls_in_over));
-
     if (isOverCompleted(checkOver.balls_in_over)) {
       await conn.query(
         `UPDATE bowling_scorecards
@@ -228,18 +227,24 @@ export const scoreBall = async (req, res) => {
 
       const inningsResult = await checkAndEndInnings(conn, updatedInnings);
 
+      
       if (inningsResult.ended) {
+        if(innings.innings_number===2){
+        const matchResultData=await matchResult(conn,innings.match_id);
+        return res.json({
+          message:"match ended",
+          inningsEnded:true,
+          target:inningsResult.target,
+          matchResult:matchResultData
+        })
+      }
         await conn.commit();
         return res.json({
           message: "innings ended",
           inningsEnded: true,
-          target: inningsResult.target,
+          target: inningsResult.target
         });
       }
-
-      const swapped = swapStrikeEndofOver({ strikerId, nonStrikerId });
-      strikerId = swapped.strikerId;
-      nonStrikerId = swapped.nonStrikerId;
 
       await conn.query(
         `UPDATE innings
@@ -279,11 +284,18 @@ export const scoreBall = async (req, res) => {
       wickets: newWickets,
       overs_per_innings: innings.overs_per_innings,
     };
-
     const result = await checkAndEndInnings(conn, updatedInnings);
-
+    if(result.ended && innings.innings_number===2){
+      const matchResultData=await matchResult(conn,innings.match_id);
+      await conn.commit();
+      return res.json({
+        message:"match ended",
+        inningsEnded:true,
+        target:result.target,
+        matchResult:matchResultData
+      })
+    }
     await conn.commit();
-
     res.json({
       message: "Ball recorded",
       strikerId,
