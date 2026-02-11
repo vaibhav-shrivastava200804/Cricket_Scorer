@@ -104,6 +104,7 @@ export const scoreBall = async (req, res) => {
     );
 
     // Update balls in over
+    let ballsInOver = currentOver.balls_in_over;
     if (!isWide) {
       const fours = batsmanRuns === 4 ? 1 : 0;
       const sixes = batsmanRuns === 6 ? 1 : 0;
@@ -126,17 +127,22 @@ export const scoreBall = async (req, res) => {
         ],
       );
       console.log("balls before this ball:" + currentOver.balls_in_over);
-    }
-
-    let ballsInOver = currentOver.balls_in_over;
-
-    if (legalBall) {
       ballsInOver += 1;
       await conn.query(` UPDATE overs SET balls_in_over=? WHERE id=?`, [
         ballsInOver,
         currentOver.id,
       ]);
     }
+
+    // let ballsInOver = currentOver.balls_in_over;
+
+    // if (legalBall) {
+    //   ballsInOver += 1;
+    //   await conn.query(` UPDATE overs SET balls_in_over=? WHERE id=?`, [
+    //     ballsInOver,
+    //     currentOver.id,
+    //   ]);
+    // }
 
     if (runs % 2 === 1) {
       [strikerId, nonStrikerId] = [nonStrikerId, strikerId];
@@ -231,13 +237,14 @@ export const scoreBall = async (req, res) => {
       if (inningsResult.ended) {
         if(innings.innings_number===2){
         const matchResultData=await matchResult(conn,innings.match_id);
+        await conn.commit();
         return res.json({
           message:"match ended",
           inningsEnded:true,
           target:inningsResult.target,
           matchResult:matchResultData
         })
-      }
+        }
         await conn.commit();
         return res.json({
           message: "innings ended",
@@ -284,6 +291,7 @@ export const scoreBall = async (req, res) => {
       wickets: newWickets,
       overs_per_innings: innings.overs_per_innings,
     };
+
     const result = await checkAndEndInnings(conn, updatedInnings);
     if(result.ended && innings.innings_number===2){
       const matchResultData=await matchResult(conn,innings.match_id);
