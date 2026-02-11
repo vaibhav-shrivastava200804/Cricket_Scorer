@@ -243,13 +243,21 @@ All match management endpoints require JWT authentication:
 }
 ```
 
-## 🚧 Known Issues
+## 🐛 Bug Fixes History
 
-1. **Match Result Not Returned**: The `matchResult()` function is called but its return value is sometimes ignored. Fix in `scoring.controller.js`:
-   - Capture return value: `const matchResultData = await matchResult(...)`
-   - Include in response: `matchResult: matchResultData`
+### Fixed Issues
 
-2. **Unreachable Code**: In END OF OVER LOGIC, the second innings check is after a `return` statement, making it unreachable.
+1. **Match Result Return Value** ✅
+   - Problem: `matchResult()` return value was ignored
+   - Fix: Captured return value and included in API response
+
+2. **Unreachable Code in END OF OVER LOGIC** ✅
+   - Problem: 2nd innings check was after `return` statement
+   - Fix: Moved innings check inside the `inningsResult.ended` block
+
+3. **Missing conn.commit() for 2nd Innings** ✅
+   - Problem: Transaction not committed for 2nd innings match end
+   - Fix: Added `await conn.commit()` before returning response
 
 ## 📄 License
 
