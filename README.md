@@ -9,7 +9,7 @@ Cricket-Scorer/
 ├── README.md
 ├── backend/
 │   ├── app.js                    # Main application entry point
-│   ├── package.json              # Dependencies and scripts
+│   ├── package.json              # Dependencies
 │   ├── .env                       # Environment variables
 │   └── src/
 │       ├── config/
@@ -51,7 +51,7 @@ Cricket-Scorer/
 - **innings Control**: Start/manage innings, end innings
 - **Ball-by-Ball Scoring**: Record runs, extras (wides, no-balls), wickets
 - **Player Management**: Track batting and bowling performances
-- **Over Management**: Automatic over completion and bowler rotation
+- **Over Management**: Over completion detection and next-bowler selection
 - **Wicket Handling**: Detailed wicket events (BOWLED, CAUGHT, RUN_OUT, etc.)
 - **Match Results**: Automatic winner calculation and result generation
 
@@ -97,9 +97,9 @@ CREATE DATABASE cricket_scorer;
 
 5. Start the server:
 ```bash
-npm run dev  # Using nodemon
-# OR
-node app.js  # Production
+node app.js
+# OR (if you want auto-restart during development)
+npx nodemon app.js
 ```
 
 ## 🔗 API Endpoints
@@ -123,7 +123,7 @@ node app.js  # Production
 |--------|----------|-------------|
 | POST | `/innings/start` | Start match (begin innings) |
 | POST | `/innings/end` | Manually end innings |
-| POST | `/innings/select-new-batsman` | Select new batsman after wicket |
+| POST | `/select/new-batsman` | Select new batsman after wicket |
 
 ### Opening
 | Method | Endpoint | Description |
@@ -181,9 +181,9 @@ POST /scoring/ball
    - `wicketFallen: true`
    - `eligibleBatsmen` array
 2. User selects new batsman
-3. Call `/innings/select-new-batsman`:
+3. Call `/select/new-batsman`:
 ```javascript
-POST /innings/select-new-batsman
+POST /select/new-batsman
 {
   "inningsId": 1,
   "newBatsmanId": 7
@@ -193,7 +193,6 @@ POST /innings/select-new-batsman
 ### Over Completion
 When over completes, response includes:
 - `overCompleted: true`
-- `eligibleBatsmen` for new batsman selection
 - `eligibleBowlers` for new bowler selection
 
 ## 🔐 Authentication
@@ -266,4 +265,3 @@ MIT License
 ## 👨‍💻 Author
 
 Vaibhav2009
-
