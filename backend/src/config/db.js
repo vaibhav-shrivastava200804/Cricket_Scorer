@@ -9,10 +9,5 @@ const pool= mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
 });
-console.log({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  db: process.env.DB_NAME
-});
 
 export default pool;
