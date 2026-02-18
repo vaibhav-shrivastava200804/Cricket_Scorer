@@ -40,7 +40,7 @@ export const scoreBall = async (req, res) => {
     if (innings.completed) throw new Error("Innings already completed");
     if (innings.waiting_for_bowler)
       throw new Error("Select new bowler before scoring");
-    if (innings.waiting_for_batsman)
+    if (innings.waiting_for_new_batsman)
       throw new Error("Select batsman before scoring");
 
     //  Fetch current over
