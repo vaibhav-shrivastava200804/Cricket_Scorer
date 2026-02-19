@@ -28,7 +28,7 @@ export const selectOpeners = async (req,res) => {
         );
 
         await conn.query(
-            "UPDATE innings SET striker_id = ?, non_striker_id = ? WHERE id = ?",
+            "UPDATE innings SET striker_id = ?, non_striker_id = ?, waiting_for_new_batsman=0 WHERE id = ?",
             [strikerId, nonStrikerId, inningsId]
         );
 

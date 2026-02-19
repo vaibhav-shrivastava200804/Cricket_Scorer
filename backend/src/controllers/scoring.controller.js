@@ -17,7 +17,7 @@ export const scoreBall = async (req, res) => {
     wicketType = "BOWLED",
     fielderId = null,
     outBatsmanId = null,
-    outEnd = null,
+    outEnd = "striker_end",
   } = req.body;
 
   const conn = await pool.getConnection();
@@ -82,6 +82,17 @@ export const scoreBall = async (req, res) => {
     let nonStrikerId = innings.non_striker_id;
     const facedBatsmanId = strikerId;
 
+    //wicket flag
+    let wicketFallen = false;
+    let wicketResponseData = null;
+    //over, innings, match flag
+    let overEnded = false;
+    let overResponseData = null;
+    let inningsEnded = false;
+    let inningsResponseData = null;
+    let matchEnded = false;
+    let matchResponseData = null;
+
     await conn.query(
       `
       UPDATE innings
@@ -105,7 +116,8 @@ export const scoreBall = async (req, res) => {
 
     // Update balls in over
     let ballsInOver = currentOver.balls_in_over;
-    if (!isWide) {
+
+    if (legalBall) {
       const fours = batsmanRuns === 4 ? 1 : 0;
       const sixes = batsmanRuns === 6 ? 1 : 0;
 
@@ -134,16 +146,6 @@ export const scoreBall = async (req, res) => {
       ]);
     }
 
-    // let ballsInOver = currentOver.balls_in_over;
-
-    // if (legalBall) {
-    //   ballsInOver += 1;
-    //   await conn.query(` UPDATE overs SET balls_in_over=? WHERE id=?`, [
-    //     ballsInOver,
-    //     currentOver.id,
-    //   ]);
-    // }
-
     if (runs % 2 === 1) {
       [strikerId, nonStrikerId] = [nonStrikerId, strikerId];
 
@@ -160,7 +162,6 @@ export const scoreBall = async (req, res) => {
     if (isWicket) {
       // Get ball number for wicket event
       const ballNumber = currentOver.balls_in_over + 1;
-
       // Create wicket event with all details
       await createWicketEvent({
         conn,
@@ -172,18 +173,25 @@ export const scoreBall = async (req, res) => {
         bowlerId: currentOver.bowler_id,
       });
 
+      wicketFallen = true;
+      let finalOutEnd = "striker_end";
       if (wicketType === "RUN_OUT") {
+        finalOutEnd = outEnd;
         if (outBatsmanId === strikerId) {
           strikerId = null;
         } else if (outBatsmanId === nonStrikerId) {
           nonStrikerId = null;
         }
+        await conn.query(
+          `UPDATE innings SET striker_id=?, non_striker_id=?,waiting_for_new_batsman = 1, last_batsman_out_end=? WHERE id = ?`,
+          [strikerId, nonStrikerId, finalOutEnd, inningsId],
+        );
+      } else {
+        await conn.query(
+          `UPDATE innings SET striker_id=null, non_striker_id=?,waiting_for_new_batsman = 1,last_batsman_out_end=? WHERE id =?`,
+          [nonStrikerId, finalOutEnd, inningsId],
+        );
       }
-
-      await conn.query(
-        `UPDATE innings SET striker_id=?, non_striker_id=?,waiting_for_new_batsman = TRUE, last_batsman_out_end=? WHERE id = ?`,
-        [strikerId, nonStrikerId, outEnd, inningsId],
-      );
 
       const eligibleBatsmen = await getEligibleBatsmen({
         conn,
@@ -191,15 +199,11 @@ export const scoreBall = async (req, res) => {
         battingTeamId: innings.batting_team_id,
       });
 
-      await conn.commit();
-
-      return res.json({
-        message: `Wicket fallen! ${wicketType}`,
-        wicketFallen: true,
+      wicketResponseData = {
         wicketType,
-        outEnd,
+        outEnd: finalOutEnd,
         eligibleBatsmen,
-      });
+      };
     }
 
     //END OF OVER LOGIC
@@ -215,7 +219,14 @@ export const scoreBall = async (req, res) => {
     );
     console.log("updated balls in over " + checkOver.balls_in_over);
     console.log(isOverCompleted(checkOver.balls_in_over));
+
     if (isOverCompleted(checkOver.balls_in_over)) {
+      overEnded = true;
+      ({ strikerId, nonStrikerId } = swapStrikeEndofOver({
+        strikerId,
+        nonStrikerId,
+      }));
+
       await conn.query(
         `UPDATE bowling_scorecards
       SET
@@ -223,6 +234,7 @@ export const scoreBall = async (req, res) => {
         WHERE innings_id=? AND player_id=?`,
         [inningsId, currentOver.bowler_id],
       );
+
       const updatedInnings = {
         ...innings,
         balls: newBalls,
@@ -233,39 +245,30 @@ export const scoreBall = async (req, res) => {
 
       const inningsResult = await checkAndEndInnings(conn, updatedInnings);
 
-      
       if (inningsResult.ended) {
-        if(innings.innings_number===2){
-        const matchResultData=await matchResult(conn,innings.match_id);
-        await conn.commit();
-        return res.json({
-          message:"match ended",
-          inningsEnded:true,
-          target:inningsResult.target,
-          matchResult:matchResultData
-        })
+        inningsEnded = true;
+        if (innings.innings_number === 2) {
+          matchEnded = true;
+          matchResponseData = await matchResult(conn, innings.match_id);
         }
-        await conn.commit();
-        return res.json({
-          message: "innings ended",
-          inningsEnded: true,
-          target: inningsResult.target
-        });
+        inningsResponseData = {
+          target: inningsResult.target,
+        };
       }
 
-      await conn.query(
-        `UPDATE innings
+      if (!inningsEnded) {
+        await conn.query(
+          `UPDATE innings
         SET 
           striker_id=?,
           non_striker_id=?
           WHERE id= ?`,
-        [strikerId, nonStrikerId, inningsId],
-      );
+          [strikerId, nonStrikerId, inningsId],
+        );
+      }
 
       const baseOvers = Math.max(1, Math.floor(innings.overs_per_innings / 5));
-
       const extraOversAllowed = innings.overs_per_innings % 5;
-
       const eligibleBowlers = await getEligibleBowlers({
         conn,
         inningsId,
@@ -274,13 +277,7 @@ export const scoreBall = async (req, res) => {
         baseOvers,
         extraOversAllowed,
       });
-
-      await conn.commit();
-      return res.json({
-        message: "Over Completed",
-        overCompleted: true,
-        eligibleBowlers,
-      });
+      overResponseData = { eligibleBowlers };
     }
 
     // Normal ball response (over not completed)
@@ -293,24 +290,43 @@ export const scoreBall = async (req, res) => {
     };
 
     const result = await checkAndEndInnings(conn, updatedInnings);
-    if(result.ended && innings.innings_number===2){
-      const matchResultData=await matchResult(conn,innings.match_id);
-      await conn.commit();
-      return res.json({
-        message:"match ended",
-        inningsEnded:true,
-        target:result.target,
-        matchResult:matchResultData
-      })
+    if (result.ended) {
+      inningsEnded = true;
+      inningsResponseData = { target: result.target };
+      if (innings.innings_number === 2) {
+        matchEnded = true;
+        matchResponseData = await matchResult(conn, innings.match_id);
+      }
     }
+
+    //final commit
     await conn.commit();
-    res.json({
-      message: "Ball recorded",
+
+    return res.json({
+      message: matchEnded
+        ? "Match ended"
+        : inningsEnded
+          ? "Innings ended"
+          : overEnded
+            ? "Over completed"
+            : wicketFallen
+              ? "Wicket fallen"
+              : "Ball recorded",
+
+      // FLAGS
+      wicketFallen,
+      overEnded,
+      inningsEnded,
+      matchEnded,
+
+      // DATA
+      ...wicketResponseData,
+      ...overResponseData,
+      ...inningsResponseData,
+      matchResult: matchResponseData,
+
       strikerId,
       nonStrikerId,
-      overCompleted: false,
-      inningsEnded: result.ended,
-      target: result.target,
     });
   } catch (error) {
     await conn.rollback();
