@@ -17,7 +17,7 @@ export const scoreBall = async (req, res) => {
     wicketType = "BOWLED",
     fielderId = null,
     outBatsmanId = null,
-    outEnd = "striker_end",
+    newBatsmanEnd = "striker_end",
   } = req.body;
 
   const conn = await pool.getConnection();
@@ -171,27 +171,28 @@ export const scoreBall = async (req, res) => {
         batsmanId: outBatsmanId,
         fielderId,
         bowlerId: currentOver.bowler_id,
+        newBatsmanEnd,
       });
 
       wicketFallen = true;
-      let finalOutEnd = "striker_end";
-      if (wicketType === "RUN_OUT") {
-        finalOutEnd = outEnd;
-        if (outBatsmanId === strikerId) {
-          strikerId = null;
-        } else if (outBatsmanId === nonStrikerId) {
-          nonStrikerId = null;
-        }
-        await conn.query(
-          `UPDATE innings SET striker_id=?, non_striker_id=?,waiting_for_new_batsman = 1, last_batsman_out_end=? WHERE id = ?`,
-          [strikerId, nonStrikerId, finalOutEnd, inningsId],
-        );
-      } else {
-        await conn.query(
-          `UPDATE innings SET striker_id=null, non_striker_id=?,waiting_for_new_batsman = 1,last_batsman_out_end=? WHERE id =?`,
-          [nonStrikerId, finalOutEnd, inningsId],
-        );
-      }
+      // let finalOutEnd = "striker_end";
+      // if (wicketType === "RUN_OUT") {
+      //   finalOutEnd = newBatsmanEnd;
+      //   if (outBatsmanId === strikerId) {
+      //     strikerId = null;
+      //   } else if (outBatsmanId === nonStrikerId) {
+      //     nonStrikerId = null;
+      //   }
+      //   await conn.query(
+      //     `UPDATE innings SET striker_id=?, non_striker_id=?,waiting_for_new_batsman = 1, last_batsman_out_end=? WHERE id = ?`,
+      //     [strikerId, nonStrikerId, finalOutEnd, inningsId],
+      //   );
+      // } else {
+      //   await conn.query(
+      //     `UPDATE innings SET striker_id=null, non_striker_id=?,waiting_for_new_batsman = 1,last_batsman_out_end=? WHERE id =?`,
+      //     [nonStrikerId, finalOutEnd, inningsId],
+      //   );
+      // }
 
       const eligibleBatsmen = await getEligibleBatsmen({
         conn,
@@ -201,7 +202,7 @@ export const scoreBall = async (req, res) => {
 
       wicketResponseData = {
         wicketType,
-        outEnd: finalOutEnd,
+        newBatsmanEnd:newBatsmanEnd,
         eligibleBatsmen,
       };
     }
@@ -256,7 +257,7 @@ export const scoreBall = async (req, res) => {
         };
       }
 
-      if (!inningsEnded) {
+      if (!inningsEnded && !wicketFallen) {
         await conn.query(
           `UPDATE innings
         SET 

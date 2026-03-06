@@ -1,10 +1,17 @@
 import pool from "../config/db.js";
 
 // Wicket types that credit the bowler
-const BOWLER_CREDIT_WICKETS = ['BOWLED', 'CAUGHT', 'LBW', 'HIT_WICKET'];
+const BOWLER_CREDIT_WICKETS = [
+  "BOWLED",
+  "CAUGHT",
+  "LBW",
+  "HIT_WICKET",
+  "STUMPING",
+  "HIT_WICKET",
+];
 
 // Wicket types that need fielder
-const TEAM_WICKETS = ['CAUGHT', 'RUN_OUT','TIMED_OUT'];
+const TEAM_WICKETS = ["RUN_OUT", "TIMED_OUT"];
 
 export const createWicketEvent = async ({
   conn,
@@ -13,27 +20,59 @@ export const createWicketEvent = async ({
   wicketType,
   batsmanId,
   fielderId = null,
-  bowlerId
+  bowlerId,
+  newBatsmanEnd,
 }) => {
+  //fetch innings
+  const [[innings]] = await conn.query(
+    `SELECT striker_id,
+                    non_striker_id,
+                    balls,
+                    waiting_for_new_batsman,
+                    last_batsman_out_end
+             FROM innings
+             WHERE id = ?`,
+    [inningsId],
+  );
+  let strikerId = innings.striker_id;
+  let nonStrikerId = innings.non_striker_id;
   // Determine if bowler gets credit
   const shouldCreditBowler = BOWLER_CREDIT_WICKETS.includes(wicketType);
   const actualBowlerId = shouldCreditBowler ? bowlerId : null;
 
   // For stumped, bowler doesn't get credit
-  const wicketBowlerId = wicketType === 'STUMPED' ? null : actualBowlerId;
+  const wicketBowlerId = wicketType === "STUMPED" ? null : actualBowlerId;
   // Insert wicket event
   const [result] = await conn.query(
     `INSERT INTO wicket_events (innings_id, ball_over_number, wicket_type, batsman_id, fielder_id, bowler_id) 
      VALUES (?, ?, ?, ?, ?, ?)`,
-    [inningsId, ballNumber, wicketType, batsmanId, fielderId, wicketBowlerId]
+    [inningsId, ballNumber, wicketType, batsmanId, fielderId, wicketBowlerId],
   );
 
-  // Update batting scorecard
+  // Update batting scorecard and innings table
+  let finalNewBatsmanEnd = "striker_end";
+  if (wicketType === "RUN_OUT") {
+    finalNewBatsmanEnd = newBatsmanEnd;
+    if (batsmanId === strikerId) {
+      strikerId = null;
+    } else if (batsmanId === nonStrikerId) {
+      nonStrikerId = null;
+    }
+    await conn.query(
+      `UPDATE innings SET striker_id=?, non_striker_id=?,waiting_for_new_batsman = 1, last_batsman_out_end=? WHERE id = ?`,
+      [strikerId, nonStrikerId, finalNewBatsmanEnd, inningsId],
+    );
+  } else {
+    await conn.query(
+      `UPDATE innings SET striker_id=null, non_striker_id=?,waiting_for_new_batsman = 1,last_batsman_out_end=? WHERE id =?`,
+      [nonStrikerId, finalNewBatsmanEnd, inningsId],
+    );
+  }
   await conn.query(
     `UPDATE batting_scorecards 
      SET is_out = 1, dismissal_type = ?, fielder_id = ?
      WHERE innings_id = ? AND player_id = ?`,
-    [wicketType, fielderId, inningsId, batsmanId]
+    [wicketType, fielderId, inningsId, batsmanId],
   );
 
   // Credit bowler if applicable
@@ -42,14 +81,18 @@ export const createWicketEvent = async ({
       `UPDATE bowling_scorecards 
        SET wickets = wickets + 1 
        WHERE innings_id = ? AND player_id = ?`,
-      [inningsId, bowlerId]
+      [inningsId, bowlerId],
     );
   }
 
   return result;
 };
 
-export const getEligibleBatsmen = async ({ conn, inningsId, battingTeamId }) => {
+export const getEligibleBatsmen = async ({
+  conn,
+  inningsId,
+  battingTeamId,
+}) => {
   const [rows] = await conn.query(
     `SELECT p.id, p.name 
      FROM players p 
@@ -58,8 +101,7 @@ export const getEligibleBatsmen = async ({ conn, inningsId, battingTeamId }) => 
        SELECT bs.player_id FROM batting_scorecards bs 
        WHERE bs.innings_id = ? AND bs.is_out = 1
      )`,
-    [battingTeamId, inningsId]
+    [battingTeamId, inningsId],
   );
   return rows;
 };
-
